@@ -1,0 +1,812 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE article PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN"   
+	"http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd" [
+<!ENTITY author "<ulink url='mailto:johnson.AT.worldhello.net'>Johnson</ulink>">
+<!ENTITY orgname "<ulink url='http://www.worldhello.net'>worldhello.net</ulink>">
+<!ENTITY % vers   SYSTEM "version.xml">
+%vers;
+]>
+<article id="index">
+<articleinfo>
+<title>配置管理规范</title>
+<subtitle>每晚构建</subtitle>
+<author><firstname>鑫</firstname><surname>蒋</surname></author>
+<affiliation>
+<orgname>&orgname;</orgname>
+<address><email>johnson.AT.worldhello.net</email></address>
+</affiliation>
+<revhistory>
+<!--revision>
+<revnumber>$Revision: 1.36 $</revnumber>
+<date>$Date: 2003/05/18 07:27:28 $</date>
+<authorinitials>$Author: jiangxin $</authorinitials>
+<revremark>...</revremark>
+</revision-->
+<revision>
+<revnumber>1.1</revnumber>
+<date>2003/5/18</date>
+<authorinitials>jiangxin</authorinitials>
+<revremark>
+<link linkend="timeserver">补充服务器的时间同步设置。</link>
+</revremark>
+</revision>
+<revision>
+<revnumber>1.0</revnumber>
+<date>2003/4/1</date>
+<authorinitials>jiangxin</authorinitials>
+<revremark>
+自动编译系统 HOWTO
+</revremark>
+</revision>
+<revision>
+<revnumber>0.2</revnumber>
+<date>2002/03/22</date>
+<authorinitials>jiangxin</authorinitials>
+<revremark>
+自动编译系统模板
+</revremark>
+</revision>
+</revhistory>
+<abstract>
+<para>
+Windows 平台的编译系统解决方案。
+</para>
+<para>
+（编译自版本: &doc.revision;，最后更新时间: &doc.lastchange;）
+</para>
+</abstract>
+</articleinfo>
+
+<sect1 id="prerequisite"><title>引言</title>
+
+<sect2><title>名词解释</title>
+<para>
+先了解一些名词，有的是我自创的：
+</para>
+<itemizedlist>
+<listitem>
+<para>
+Nightly Build
+</para>
+<para>
+字面直译为：每晚编译。
+</para>  
+  <orderedlist>
+  <listitem>
+  <para>
+  实现了自动编译，摆脱了编译的手工劳动；
+  </para>
+  </listitem>
+  <listitem>
+  <para>
+  对于大型系统，编译耗时，在晚间完成则节约了工作成本；
+  </para>
+  </listitem>
+  <listitem>
+  <para>
+  实现版本号的自动管理（Build号，每次编译自增）；
+  </para>
+  </listitem>
+  </orderedlist>
+</listitem>
+<listitem>
+<para>
+milestone 版本
+</para>
+<para>
+里程碑版本。在编译时，使用里程碑的代码。例如定义为 RELEASE 的里程碑，可以在每次重新将代码提升为 RELEASE 时，删除上一次建立的 RELEASE 的LABEL/TAG，再重新为新代码打上 LABEL/TAG。但更好的方法是将稳定的 LABEL 记录在一个文件（如：PROMOTION）中，这个文件的最新内容即为里程碑代码的标签（TAG/LABEL），删除 LABEL/TAG 的危险动作换成了新建 LABEL/TAG 和 Checkin 文件。
+</para>
+</listitem>
+<listitem>
+<para>
+sticky 版本
+</para>
+<para>
+固定版本。有时想要编译某一固定状态（指定的LABEL/TAG）代码，可将这个 LABEL/TAG 传给编译系统，进行编译，这种编译方式称为 sticky 版本的编译。
+</para>
+</listitem>
+<listitem>
+<para>
+nightly 版本
+</para>
+<para>
+使用最新的代码进行编译。如果代码自上次编译以来没有更改，则无需编译。
+</para>
+</listitem>
+<listitem id="revision">
+<para>
+版本号
+</para>
+<para>
+版本号的格式为：a.b.c.d。
+</para>
+<para>
+其中 a - 主版本号（Major version）, b - 副版本号（Minor version）, c - 发布号（Release）, d - 编译号（build）。主版本号和副版本号在项目计划中便已经指定，标志着重要的功能变动。Release版本号 c，用于体现小的功能变更或用来管理项目的分支。build号则在每次编译时自动加1。
+</para>
+</listitem>
+<listitem>
+<para>
+PROMOTION
+</para>
+<para>
+版本提升。某一里程碑（LABEL/TAG标记）代码，随着开发周期的继续，如果能够顺利通过各级测试，并最终发布。则其对应的产品必然经历 daily build版本、alpha测试版本、beta测试版本、release版本。
+</para>
+<para>
+Starteam 版本控制系统，有专门的 LABEL 管理这种事件，叫做 PROMOTION。对于其它版本控制系统，我们可以很容易的使用文件记录LABEL的方式相对应。
+</para>
+<para>
+Starteam 的 PROMOTION 请参见我的一篇文章《Starteam Howto》。
+</para>
+</listitem>
+<listitem>
+<para>
+版本控制系统
+</para>
+<para>
+版本控制系统，如：CVS、STARTEAM、PVCS、VSS等，是自动编译系统的基础。熟练掌握其名利行工具的使用是关键。推荐使用CVS作为版本控制系统，因为其命令行功能最强大。
+</para>
+</listitem>
+</itemizedlist>
+</sect2>
+
+<sect2><title>建立系统的命令行编译过程</title>
+<para>
+如果没有命令行的编译过程，想要构建自动化的编译系统，简直是天方夜谭。
+</para>
+<para>
+对于 UNIX 的系统，支持命令行编译自然不再话下。简单至一个 Makefile，到复杂的 SHELL 脚本、automake+autoconf 系统。
+</para>
+<para>
+对于 Windows 上的项目，比如说 VC，其实也有命令行支持。从 VC5.0的 NMAKE 到 VC6.0 的 MSDEV 命令。但是 Windows 平台的 shell 实在功能有限。查一下 Windows 的关于 batchfile 的帮助吧，只有可怜的半页，DOS时代的古董。我们需要使用扩充的命令行工具来扩展。可以的选择有 JAVA、PERL、PYTHON、CYGWIN。我选择了 Cygwin ，是因为我只会 Unix bash。 8-)
+</para>
+</sect2>
+
+<sect2><title>关于版本号自增</title>
+<para>
+实现 BUILD 号自增，其实只要将版本号写入文件，并版本控制。每次编译成功后，版本号+1，再重新 Checkin 即可。
+</para>
+<para>
+对于只需要一个版本号的系统，非常简单。对于复杂的系统，比如说一个 Windows 平台的程序，可能每一个 dll, exe 都需要不同的版本。也可以把这些相关信息写入一个文件，每次编译更新完毕代码后，在将一个文件控制的众多版本信息分别写到其它独立的版本控制文件中（如 VC中的 *.rc 文件中的 FileVersion, ProductVersion 等）。
+</para>
+<para>
+版本号的格式，参见：<link linkend="revision">版本号说明</link>。
+</para>
+</sect2>
+
+<sect2><title>关于代码更新检查</title>
+<para>
+如果代码没有更改，自动编译系统还要去编译，去使版本号递增，实在太傻，浪费时间，也会使开发、测试陷入混乱。
+</para>
+<para>
+可以将上一次编译的时间记录在一个文件中，再次编译时，先比较自从上次编译以来，到现在为止是否有代码改动，如果有代码改动则版本号自增，并触发编译系统。这看起来有点不可思议，其实一个命令就够了：
+</para>
+<screen>
+$ <command>cvs -q diff --brief -D "上一次编译日期"</command>
+</screen>
+</sect2>
+
+<sect2><title>关于软件包签名和下载</title>
+<para>
+认为编译完成就完事大吉，是错误的。如果不进行进一步的处理，下次编译将会冲掉上次编译的结果。因此需要把生成的软件包，按照规则重新命名，例如加上版本号和编译日期。
+</para>
+<para>
+如果软件包不便于访问，也不利于工作的开展。在编译/发布机提供 FTP 服务是最理想的。
+</para>
+<para>
+还要说说软件签名。不但是为了防止黑客的恶意篡改，也是协助下载用户对软件包进行完整性检查的方法。参见我的一篇文档：《PGP/GPG HOWTO》。
+</para>
+</sect2>
+
+<sect2 id="nightlybuild-promotion"><title>软件开发周期和版本号演进示意图</title>
+<table frame='all'><title>软件开发周期和版本号演进</title>
+<tgroup cols='8' align='left' colsep='1' rowsep='1'>
+<colspec colname='c1'/>
+<colspec colname='c2'/>
+<colspec colname='c3'/>
+<colspec colname='c4'/>
+<colspec colname='c5'/>
+<colspec colname='c6'/>
+<colspec colname='c7'/>
+<colspec colname='c8'/>
+<thead>
+<row>
+  <entry>版本号</entry>
+  <entry>软件更改记录</entry>
+  <entry>内核（Nightly Version）</entry>
+  <entry>内核（Mailstone Version）</entry>
+  <entry>内核（Stable Version）</entry>
+  <entry>建立 Label/Tag</entry>
+  <entry>提升（Mailstone Promotion）</entry>
+  <entry>提升（Stable Promotion）</entry>
+</row>
+</thead>
+<tbody>
+<row>
+  <entry morerows='4' valign='middle'>2.2.1</entry>
+  <entry morerows='4'>
+    <para>Changes with xxx 2.2.1</para>
+    <para>  *) ... ...</para>
+    <para></para>
+    <para>  *) ... ...</para>
+  </entry>
+  <entry>PRODUCT-nightly-2.2.1.1</entry>
+  <entry></entry>
+  <entry></entry>
+  <entry></entry>
+  <entry></entry>
+  <entry></entry>
+</row>
+<row>
+  <entry>PRODUCT-nightly-2.2.1.2</entry>
+  <entry></entry>
+  <entry></entry>
+  <entry>V-2-2-1-2</entry>
+  <entry></entry>
+  <entry></entry>
+</row>
+<row>
+  <entry>PRODUCT-nightly-2.2.1.3</entry>
+  <entry></entry>
+  <entry></entry>
+  <entry>V-2-2-1-3</entry>
+  <entry></entry>
+  <entry></entry>
+</row>
+<row>
+  <entry>... ...</entry>
+  <entry></entry>
+  <entry></entry>
+  <entry>... ...</entry>
+  <entry></entry>
+  <entry></entry>
+</row>
+<row>
+  <entry>PRODUCT-nightly-2.2.1.15</entry>
+  <entry>PRODUCT-2.2.1.15</entry>
+  <entry></entry>
+  <entry>V-2-2-1-15</entry>
+  <entry>
+    <para>记录本次提升为 Mailstone 的事件。</para>
+    <para>该 Mailstone 为最终发布版的候选版本，但有可能由于潜藏的bug，
+     本次没能继续提升为 Stable Release。</para>
+    <para>提升事件触发小版本号＋1。</para>
+  </entry>
+  <entry></entry>
+</row>
+<row>
+  <entry morerows='2' valign='middle'>2.2.2</entry>
+  <entry morerows='2'>
+    <para>Changes with xxx 2.2.2</para>
+    <para>  *) ... ...</para>
+    <para></para>
+    <para>  *) ... ...</para>
+  </entry>
+  <entry>PRODUCT-nightly-2.2.2.1</entry>
+  <entry></entry>
+  <entry></entry>
+  <entry>V-2-2-2-1</entry>
+  <entry></entry>
+  <entry></entry>
+</row>
+<row>
+  <entry>PRODUCT-nightly-2.2.2.2</entry>
+  <entry></entry>
+  <entry></entry>
+  <entry>V-2-2-2-2</entry>
+  <entry></entry>
+  <entry></entry>
+</row>
+<row>
+  <entry>PRODUCT-nightly-2.2.2.3</entry>
+  <entry>PRODUCT-2.2.2.3</entry>
+  <entry>copy from mailstone</entry>
+  <entry>V-2-2-2-3</entry>
+  <entry>
+    <para>完成上一个里程碑版本 bug 的修正，将该版本提升为里程碑，并编译。记录该事件</para>
+    <para>该 里程碑版本 为 最终发布版本的候补版本。</para>
+    <para>提升事件触发小版本号＋1。</para>
+
+  </entry>
+  <entry>
+    <para>之后，发现该版本稳定。可将该版本确定为 Stable 版本，用手工签名取代自动编译的签名。</para>
+    <para>并把相应的 Mailstone 内核复制到 Stable 版本库中。</para>
+  </entry>
+</row>
+<row>
+  <entry>2.2.3</entry>
+  <entry>
+    <para>Changes with xxx 2.2.3</para>
+    <para>  *) ... ...</para>
+    <para></para>
+    <para>  *) ... ...</para>
+  </entry>
+  <entry>
+    <para>PRODUCT-nightly-2.2.3.1</para>
+  </entry>
+  <entry></entry>
+  <entry></entry>
+  <entry>V-2-2-3-1</entry>
+  <entry></entry>
+  <entry></entry>
+</row>
+<row>
+  <entry namest="c1" nameend="c8" align="center">
+    <para>
+      进行如同 2.2.2 的循环，提升为 mailstone，在经过测试，成为 Stable发布版。
+    </para>
+    <para>
+      在准备加入新功能前，为该版本建立分支，进行单独维护。
+    </para>
+  </entry>
+</row>
+</tbody>
+</tgroup>
+</table>
+</sect2>
+
+</sect1>
+
+<sect1 id="flowchart"><title>自动编译系统流程图</title>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/flowchart.png" format="PNG"/>
+</imageobject>
+<caption>
+<para>
+自动编译系统流程图
+</para>
+</caption>
+</mediaobject>
+
+</sect1>
+
+
+<sect1 id="config"><title>自动编译系统的配置</title>
+
+<sect2><title>目录结构</title>
+
+<itemizedlist>
+<listitem>
+<para>
+工程源代码目录（NBDSOURCE）
+</para>
+<para>
+在该目录下 Checkout 工程的源代码。它是整个工程的核心。
+</para>
+</listitem>
+<listitem>
+<para>
+工程源代码配置目录（NBDSRCCTL）
+</para>
+<para>
+在源代码目录下，创建一个存放控制文件的目录，如 config，或者 admin。主要是放入存储编译日期、版本的文件。
+</para>
+</listitem>
+<listitem>
+<para>
+Nightly Build编译脚本目录 (NBDSCRIPT)
+</para>
+<para>
+在该目录 Checkout 执行自动编译的脚本。它是整个编译系统的工具箱。
+</para>
+</listitem>
+<listitem>
+<para>
+Nightly Build启动目录 (NBDHOMEDIR)
+</para>
+<para>
+同样的编译脚本，要能够编译一个工程的不同的分支，也要能够编译如前所述的 nightly, milestone, sticky 版本。这就需要建立发起编译的目录，该目录主要放置一些能够区分不同编译条件的配置文件，以及启动编译脚本的钩子脚本。
+</para>
+</listitem>
+</itemizedlist>
+
+</sect2>
+
+<sect2><title>配置文件</title>
+<sect3><title>NBDHOMEDIR/build.ini</title>
+<para>
+用于指定源代码、脚本的路径。
+</para>
+<screen>
+NBDSCRIPT=/home/Administrator/work/jiangxin/src/nightlybuild/script/  <co id="co.nbdscript"/>
+NBDSOURCE=/home/Administrator/work/jiangxin/src/dlltest/ <co id="co.nbdsource"/>
+</screen>
+<calloutlist>
+<callout arearefs="co.nbdscript">
+<para>
+脚本的根路径
+</para>
+</callout>
+<callout arearefs="co.nbdsource">
+<para>
+源代码的根路径
+</para>
+</callout>
+</calloutlist>
+</sect3>
+
+<sect3><title>NBDHOMEDIR/LABEL</title>
+<para>
+决定编译的版本：nightly, milestone, 还是 sticky 版本。
+</para>
+
+<itemizedlist>
+<listitem>
+<para>
+空文件，或者内容为 nightly 的文件，意味着编译 nightly 版本。
+</para>
+</listitem>
+<listitem>
+<para>
+内容为 milestone，意味着编译 milestone 版本。
+</para>
+</listitem>
+<listitem>
+<para>
+内容为某一真实存在的标签 LABEL/TAG，意味着编译该版本的 sticky 编译。
+</para>
+</listitem>
+</itemizedlist>
+</sect3>
+
+<sect3><title>NBDHOMEDIR/BRANCH</title>
+<para>
+如果是空文件，或者内容为 main，意味着当前代码处于主线。
+</para>
+<para>
+如果是其它内容，则该内容为分支 LABEL/TAG。
+</para>
+<para>
+这个文件是和 CVS 的 MAGIC BRANCH 的概念向对应的，参见：《Per Cederqvist's CVS Manual》
+</para>
+</sect3>
+
+<sect3><title>NBDHOMEDIR/nightly.sh</title>
+<para>
+调用真正的脚本的钩子脚本。
+</para>
+<screen>
+<![CDATA[
+#!/bin/sh
+#set -x
+
+NBDHOMEDIR=`dirname $0`
+
+if echo "$NBDHOMEDIR" | grep -q -v  "^/"; then
+	NBDHOMEDIR="`pwd`/${NBDHOMEDIR}"
+fi
+
+NBDHOMEDIR=${NBDHOMEDIR%\.}
+NBDHOMEDIR=${NBDHOMEDIR%/}
+export NBDHOMEDIR
+
+build_file_name="${NBDHOMEDIR}/build.ini"
+
+if [ ! -f "$build_file_name" ]; then
+	echo "not find $build_file_name!" && exit 1
+fi
+
+. $build_file_name
+
+cd $NBDSCRIPT
+sh nightlybuild.sh "$@"
+
+]]>
+</screen>
+</sect3>
+
+<sect3><title>NBDSRCCTL/VERSION</title>
+<para>
+记录版本号、编译日期
+</para>
+<screen>
+[myapp] <co id="co.sect.name"/>
+module=RegDllTest otherapp <co id="co.sect.module"/>
+version=1.3.5.10 <co id="co.sect.version"/>
+buildtime=2003-04-01 20:44:48 <co id="co.sect.buildtime"/>
+revisonfile=RegDllTest/RegDllTest.rc <co id="co.sect.rcfile"/>
+
+[mydll]
+module=DisplayAppName
+version=2.1.3.19
+buildtime=2003-02-12 10:21:08
+revisonfile=DisplayAppName/DisplayAppName.rc
+
+[global] <co id="co.global.name"/>
+version=1.0.0.1 <co id="co.global.version"/>
+buildtime=2003-04-01 20:44:48
+
+</screen>
+<calloutlist>
+<callout arearefs="co.sect.name">
+<para>
+表示一个单元的开始
+</para>
+</callout>
+<callout arearefs="co.sect.module">
+<para>
+模块列表，需要检查代码更新的模块列表
+</para>
+</callout>
+<callout arearefs="co.sect.version">
+<para>
+定义该单元模块的版本号
+</para>
+</callout>
+<callout arearefs="co.sect.buildtime">
+<para>
+上一次该模块编译的时间
+</para>
+</callout>
+<callout arearefs="co.sect.rcfile">
+<para>
+包含版本信息的资源文件，用本节定义的版本号去更新资源文件
+</para>
+</callout>
+<callout arearefs="co.global.name">
+<para>
+全局配置开始
+</para>
+</callout>
+<callout arearefs="co.global.version">
+<para>
+整个软件包的版本号
+</para>
+</callout>
+</calloutlist>
+</sect3>
+
+
+<sect3><title>NBDSRCCTL/PROMOTION</title>
+<para>
+记录里程碑版本号。例如：
+</para>
+<screen>
+JOHNSON-V-1-0-1
+</screen>
+</sect3>
+
+</sect2>
+
+</sect1>
+
+<appendix id="nbcmdline"><title>Nightly Build命令行</title>
+<screen>
+<![CDATA[
+Synopsis: nightly.sh [options...] [command...]
+    Options :
+        -release (-r) 
+            build RELEASE version (default)
+        -engineer (-e) 
+            build engineer version
+        -force (-f)  
+            force build.
+
+    Command:
+        nightly (n)
+            All commands are bind to one. there are three steps to run nightly.
+            update, compile, link, post
+        update (up) 
+            1st step of running nightly.
+            update_source_code         : step 1.1
+            update_version_file        : step 1.2
+            update_rc_file             : step 1.3
+        compile (c) 
+            2nd step of running nightly.
+            run custom make.bat        : step 2.1
+        link (l) 
+            3rd step of running nightly.
+            run custom link.bat        : step 3.1
+        post (l) 
+            4th step of running nightly.
+            cp package to ftp_dir      : step 4.1
+            checkin version file       : step 4.2
+    Other Command:
+        help  
+            This screen.
+        config
+            Additional help.
+
+        run nightly.sh config to see additional help. 
+
+]]>
+</screen>
+</appendix>
+
+<appendix id="devcmdline"><title>编程工具的命令行支持</title>
+<sect1 id="dev-unix"><title>Unix/Linux</title>
+<orderedlist inheritnum="ignore" continuation="restarts">
+<listitem>
+<para>使用autoconf/automake/autoheader工具</para> 
+<para>用autoconf/automake/autoheader工具来处理各种移植性的问题，用这些工具完成系统配置信息的收集，制作makefile文件。然后在打算编译源码时只需要通过 “configure; make”这样简单的命令就可以得到干净利落的编译。</para> 
+</listitem>
+<listitem>
+<para>GNU Makefile</para> 
+<para>
+参见 
+<ulink url="http://www.gnu.org/prep/standards.html#SEC48">GNU Makefile和configure</ulink> 
+</para>
+</listitem>
+<listitem>
+<para>BSD Makefile</para> 
+<para>
+参见 
+<ulink url="http://www.freebsd.org/doc/en_US.ISO8859-1/books/porters-handbook/">FreeBSD Porter's Handbook</ulink> 
+</para>
+</listitem>
+</orderedlist>
+</sect1>
+
+<sect1 id="dev-vc"><title>Visual C++</title>
+<para>
+msdev 提供命令行编译支持，可以直接使用 .dsw, .dsp 文件执行命令行编译。
+</para>
+<screen>
+<![CDATA[
+Usage:
+  MSDEV [myprj.dsp|mywksp.dsw]  - load project/workspace
+        [<filename>]            - load source file
+        /?                      - display usage information
+        /EX <macroname>         - execute a VBScript macro
+        /OUT <filename>         - redirect command line output to a file
+        /USEENV                 - ignore tools.options.directories settings
+        /MAKE [<target>] [...]  - build specified target(s)
+              [<project> - <platform> <configname>]
+              [[<project>|ALL] - [DEBUG|RELEASE|ALL]]
+              /CLEAN            - delete intermediate files but don't build
+              /REBUILD          - clean and build
+              /NORECURSE        - don't build dependent projects
+]]>
+</screen>
+<para>
+例如：
+</para>
+<screen>
+<![CDATA[
+MSDEV myprj.dsp /MAKE "ALL - Win32 Release" /REBUILD
+]]>
+</screen>
+</sect1>
+
+<sect1 id="dev-cbuilder"><title>C++ Builder</title>
+<para>
+C++ Builder 的工程文件 .bpr 文件是 XML 格式的文件，不能直接提供给命令行进行编译，需要转换为 .mak 格式的Makefile。
+</para>
+<para>
+将 .bpr 文件转换为 .mak 文件：
+</para>
+<screen>
+<![CDATA[
+BPR2MAK -omyprj.mak myprj.bpr
+]]>
+</screen>
+<para>
+执行命令行编译：
+</para>
+<screen>
+<![CDATA[
+MAKE -B -fmyprj.mak
+]]>
+</screen>
+</sect1>
+
+<sect1 id="dev-vb"><title>Visual Basic</title>
+<screen>
+<![CDATA[
+vb6[.exe] [[{/run | /r} projectname] [[{/d compileconst}] {/make | /m } projectname] [{/makedll | /l} projectname] 
+{/cmd argument | /c argument}][{/runexit} projectname][{/m} or {/runexit} projectname /out filename}][{/m}][/sdi] or [/mdi]
+]]>
+</screen>
+</sect1>
+
+
+<sect1 id="dev-installshield"><title>Install Shield</title>
+<para>
+命令行工具 Compile.exe 和 ISbuild.exe 可以完成命令行方式的打包。
+</para>
+<screen>
+<![CDATA[
+Compile script_file [ifx_obl_file] [isrt_obl_file] [ifxobject_obl_file] switches
+ISBuild [switches]
+]]>
+</screen>
+</sect1>
+
+<sect1 id="dev-innosetup"><title>INNO Setup</title>
+<para>
+命令行工具 iscc.exe 可以完成命令行方式的打包。
+</para>
+<screen>
+<![CDATA[
+iscc "c:\isetup\samples\my script.iss" 
+]]>
+</screen>
+</sect1>
+
+</appendix>
+
+<appendix id="timeserver"><title>时钟同步</title>
+<para>
+在实践中，会发现编译机和版本控制服务器的时钟同步非常重要。因为编译机确定编译的时间，是从本地取时钟，编译成功后，要将编译时间 checkin 到版本控制服务器，以便下次执行自动编译时，从该文件获取上次编译时间，比较两个时间间隔内有否代码改动。如果发布机的时钟和版本控制系统的时钟不一致，会导致代码更新的误判。
+</para>
+<para>
+最近在网上发现了一篇文章，<ulink url="http://geodsoft.com/howto/timesync/othersoft.htm">《A Beginner's Guide to Network Time Protocol--Other Time Software》</ulink>，非常巧合的是，我在选择时间同步方案的时候，走了几乎相同的路。
+</para>
+<para>
+对于工作组内平台相对单一，时钟同步是一件非常简单的事情：
+</para>
+<para>
+加入 Windows 域的 Windows 平台的机器会定期和域控制服务器时钟同步。亦可以使用命令"net time /setsntp" 和 ntp 服务器时钟同步。
+</para>
+<para>
+对于Unix服务器来说，则有更多选择的余地。例如：从最简单的使用13端口的 RFC867 daytime 协议；使用基于 RFC868 Time Protocol 的 rdate 命令从服务器读取时间来设置本地时间；运行 timed，保持 unix 机器自动同步时钟；以及用 ntp 协议和国际标准时同步。
+</para>
+<para>
+对于复杂的网络环境，使用 ntp 确是上选。
+</para>
+<para>
+Servers that provide synchronization to a sizeable population of clients normally operate as a group of three or more mutually redundant servers, each operating with three or more stratum-one or stratum-two servers in client-server modes, as well as all other members of the group in symmetric modes. This provides protection against malfunctions in which one or more servers fail to operate or provide incorrect time. The NTP algorithms have been specifically engineered to resist attacks where some fraction of the configured synchronization sources accidently or purposely provide incorrect time. In these cases a special voting procedure is used to identify spurious sources and discard their data.
+</para>
+<para>
+参见：<ulink url="http://geodsoft.com/howto/timesync/">《A Beginner's Guide to Network Time Protocol (NTP)》</ulink>, <ulink url="http://www.eecis.udel.edu/~mills/ntp/html/notes.html">《Notes on setting up a NTP subnet》</ulink>...
+</para>
+
+<itemizedlist>
+<listitem>
+<para>
+选择几个内部的 Unix 服务器非别和一组 Internet 上的 NTP 服务器保持时钟同步；
+</para>
+</listitem>
+<listitem>
+<para>
+前面配置的服务器作为工作组内其它服务器的 NTP 服务器；
+</para>
+</listitem>
+<listitem>
+<para>
+非别在 Unix 和 Windows 平台安装客户端软件，和工作组内的 NTP 服务器同步。
+</para>
+</listitem>
+</itemizedlist>
+
+<para>
+Unix上的 NTP软件：
+</para>
+<para>
+<ulink url="http://www.ntp.org/downloads.html">下载...</ulink>
+</para>
+
+<para>
+Windows上的 NTP客户端的配置：
+</para>
+
+<itemizedlist>
+<listitem>
+<para>
+安装软件：<ulink url="http://www.oneguycoding.com/automachron/">automachron</ulink>；
+</para>
+</listitem>
+<listitem>
+<para>
+运行 achron.exe /s 运行 automachron；
+</para>
+</listitem>
+<listitem>
+<para>
+使用工具Microsoft Windows NT Resource Kit: instsrv.exe, srvany.exe 将 automachron 加入系统服务中，自动运行；
+</para>
+<para>
+参见：<ulink url="http://cctips.nease.net/2kxp/runasservices/runasservices.htm">让程序作为服务运行</ulink>。
+</para>
+</listitem>
+<listitem>
+<para>
+查看 automachron 的运行日志，确定 automachron 正确执行。
+</para>
+</listitem>
+</itemizedlist>
+
+</appendix>
+
+</article>
